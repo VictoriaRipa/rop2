@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Vitrina</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="admin-body">
+
+  <!-- LOGIN -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-box">
+      <div class="login-logo">VITRINA</div>
+      <p>Panel de administración</p>
+      <input type="password" id="login-password" placeholder="Contraseña" autocomplete="current-password" />
+      <button onclick="doLogin()">Ingresar</button>
+      <p class="login-error hidden" id="login-error">Contraseña incorrecta</p>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="admin-panel" class="hidden">
+    <header class="admin-header">
+      <div class="admin-header-brand">VITRINA <span>·</span> Admin</div>
+      <div class="admin-header-actions">
+        <a href="/" target="_blank" class="btn-secondary">Ver tienda →</a>
+        <button class="btn-danger-sm" onclick="logout()">Salir</button>
+      </div>
+    </header>
+
+    <div class="admin-content">
+
+      <!-- FORM -->
+      <section class="admin-card">
+        <h2 class="admin-card-title" id="form-title">Nueva prenda</h2>
+        <form id="product-form" enctype="multipart/form-data">
+          <input type="hidden" id="edit-id" value="" />
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nombre *</label>
+              <input type="text" id="f-name" placeholder="Ej: Campera de jean celeste" required />
+            </div>
+            <div class="form-group">
+              <label>Categoría *</label>
+              <select id="f-category" required>
+                <option value="">Seleccionar...</option>
+                <option>Remeras</option>
+                <option>Pantalones</option>
+                <option>Camperas</option>
+                <option>Vestidos</option>
+                <option>Calzado</option>
+                <option>Accesorios</option>
+                <option>Otro</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Precio (ARS) *</label>
+              <input type="number" id="f-price" placeholder="Ej: 3500" min="0" required />
+            </div>
+            <div class="form-group">
+              <label>Talle</label>
+              <input type="text" id="f-size" placeholder="S, M, L, XL, 40..." />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea id="f-desc" placeholder="Estado, material, detalles importantes..." rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Fotos (hasta 5)</label>
+            <div class="upload-area" id="upload-area">
+              <input type="file" id="f-images" accept="image/*" multiple />
+              <span class="upload-icon">📷</span>
+              <p>Tocá para seleccionar fotos</p>
+              <small>JPG, PNG, HEIC · máx. 10 MB c/u</small>
+            </div>
+            <div id="preview-container" class="preview-container"></div>
+            <div id="existing-images" class="hidden" style="margin-top:14px">
+              <p class="existing-label">Fotos actuales — tocá ✕ para eliminar</p>
+              <div id="existing-list" class="preview-container"></div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary" id="submit-btn">Agregar prenda</button>
+            <button type="button" class="btn-secondary" id="cancel-edit" onclick="cancelEdit()" style="display:none">Cancelar</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- LIST -->
+      <section class="admin-card">
+        <div class="admin-list-header">
+          <h2 class="admin-card-title" style="margin:0;border:none;padding:0">Mis prendas</h2>
+          <div class="list-filters">
+            <button class="filter-btn active" onclick="filterAdmin(this,'all')">Todas</button>
+            <button class="filter-btn" onclick="filterAdmin(this,'available')">Disponibles</button>
+            <button class="filter-btn" onclick="filterAdmin(this,'sold')">Vendidas</button>
+          </div>
+        </div>
+        <div id="admin-products-list" class="admin-products-list">
+          <p class="loading">Cargando...</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('admin_token') || '';
+    let adminProducts = [];
+    let adminFilter = 'all';
+    let keepImages = [];
+
+    // ---- AUTH ----
+    async function doLogin() {
+      const pw = document.getElementById('login-password').value;
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      if (r.ok) {
+        const d = await r.json();
+        token = d.token;
+        localStorage.setItem('admin_token', token);
+        showPanel();
+      } else {
+        document.getElementById('login-error').classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('login-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    function logout() {
+      localStorage.removeItem('admin_token');
+      token = '';
+      document.getElementById('admin-panel').classList.add('hidden');
+      document.getElementById('login-screen').classList.remove('hidden');
+    }
+
+    async function showPanel() {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('admin-panel').classList.remove('hidden');
+      await loadProducts();
+    }
+
+    if (token) {
+      fetch('/api/admin/products', { headers: { 'x-admin-token': token } })
+        .then(r => r.ok ? showPanel() : null);
+    }
+
+    // ---- DATA ----
+    async function loadProducts() {
+      const r = await fetch('/api/admin/products', { headers: { 'x-admin-token': token } });
+      adminProducts = await r.json();
+      renderList();
+    }
+
+    function renderList() {
+      const el = document.getElementById('admin-products-list');
+      let list = adminProducts;
+      if (adminFilter === 'available') list = adminProducts.filter(p => !p.sold);
+      if (adminFilter === 'sold')      list = adminProducts.filter(p => p.sold);
+
+      if (!list.length) {
+        el.innerHTML = '<p class="empty-msg">No hay prendas aquí todavía.</p>';
+        return;
+      }
+
+      el.innerHTML = list.map(p => `
+        <div class="admin-product-row ${p.sold ? 'sold' : ''}">
+          <div class="admin-row-img">
+            ${p.images[0]
+              ? `<img src="${p.images[0]}" alt="${p.name}" />`
+              : `<div class="no-img-sm">○</div>`}
+          </div>
+          <div class="admin-row-info">
+            <strong>${p.name}</strong>
+            <span class="badge">${p.category}</span>
+            ${p.size ? `<span class="badge badge-gray">Talle ${p.size}</span>` : ''}
+            ${p.sold ? `<span class="badge badge-sold">Vendida</span>` : ''}
+            <br />
+            <span class="admin-price">$${p.price.toLocaleString('es-AR')}</span>
+            ${p.description ? `<p class="admin-desc">${p.description}</p>` : ''}
+          </div>
+          <div class="admin-row-actions">
+            <button class="btn-sm btn-edit" onclick="editProduct('${p.id}')">Editar</button>
+            <button class="btn-sm ${p.sold ? 'btn-success' : 'btn-warning'}"
+              onclick="toggleSold('${p.id}', ${!p.sold})">
+              ${p.sold ? 'Disponible' : 'Vendida'}
+            </button>
+            <button class="btn-sm btn-danger" onclick="deleteProduct('${p.id}')">Eliminar</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterAdmin(btn, f) {
+      document.querySelectorAll('.list-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      adminFilter = f;
+      renderList();
+    }
+
+    // ---- IMAGE PREVIEW ----
+    document.getElementById('f-images').addEventListener('change', function() {
+      const c = document.getElementById('preview-container');
+      c.innerHTML = '';
+      Array.from(this.files).forEach(file => {
+        const r = new FileReader();
+        r.onload = e => {
+          const d = document.createElement('div');
+          d.className = 'preview-item';
+          d.innerHTML = `<img src="${e.target.result}" />`;
+          c.appendChild(d);
+        };
+        r.readAsDataURL(file);
+      });
+    });
+
+    // ---- FORM ----
+    document.getElementById('product-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const editId = document.getElementById('edit-id').value;
+      const fd = new FormData();
+      fd.append('name', document.getElementById('f-name').value);
+      fd.append('category', document.getElementById('f-category').value);
+      fd.append('price', document.getElementById('f-price').value);
+      fd.append('size', document.getElementById('f-size').value);
+      fd.append('description', document.getElementById('f-desc').value);
+      for (const f of document.getElementById('f-images').files)
+        fd.append(editId ? 'newImages' : 'images', f);
+      if (editId) fd.append('keepImages', JSON.stringify(keepImages));
+
+      const r = await fetch(
+        editId ? `/api/admin/products/${editId}` : '/api/admin/products',
+        { method: editId ? 'PUT' : 'POST', headers: { 'x-admin-token': token }, body: fd }
+      );
+
+      if (r.ok) {
+        resetForm();
+        await loadProducts();
+      } else {
+        const err = await r.json();
+        alert('Error: ' + err.error);
+      }
+    });
+
+    function resetForm() {
+      document.getElementById('product-form').reset();
+      document.getElementById('edit-id').value = '';
+      document.getElementById('preview-container').innerHTML = '';
+      document.getElementById('existing-images').classList.add('hidden');
+      document.getElementById('form-title').textContent = 'Nueva prenda';
+      document.getElementById('submit-btn').textContent = 'Agregar prenda';
+      document.getElementById('cancel-edit').style.display = 'none';
+      keepImages = [];
+    }
+
+    function cancelEdit() { resetForm(); }
+
+    function editProduct(id) {
+      const p = adminProducts.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('edit-id').value = p.id;
+      document.getElementById('f-name').value = p.name;
+      document.getElementById('f-category').value = p.category;
+      document.getElementById('f-price').value = p.price;
+      document.getElementById('f-size').value = p.size;
+      document.getElementById('f-desc').value = p.description;
+      document.getElementById('form-title').textContent = 'Editar prenda';
+      document.getElementById('submit-btn').textContent = 'Guardar cambios';
+      document.getElementById('cancel-edit').style.display = '';
+      keepImages = [...p.images];
+      const existWrap = document.getElementById('existing-images');
+      const existList = document.getElementById('existing-list');
+      existList.innerHTML = p.images.map(img => `
+        <div class="preview-item" id="ei-${img.replace(/[\/.]/g,'-')}">
+          <img src="${img}" />
+          <button class="remove-img-btn" onclick="removeExisting('${img}')">✕</button>
+        </div>
+      `).join('');
+      existWrap.classList.toggle('hidden', !p.images.length);
+      document.getElementById('product-form').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function removeExisting(img) {
+      keepImages = keepImages.filter(i => i !== img);
+      const el = document.getElementById('ei-' + img.replace(/[\/.]/g, '-'));
+      if (el) el.remove();
+    }
+
+    async function toggleSold(id, sold) {
+      const fd = new FormData();
+      fd.append('sold', sold.toString());
+      await fetch(`/api/admin/products/${id}`, {
+        method: 'PUT',
+        headers: { 'x-admin-token': token },
+        body: fd
+      });
+      await loadProducts();
+    }
+
+    async function deleteProduct(id) {
+      const p = adminProducts.find(x => x.id === id);
+      if (!confirm(`¿Eliminar "${p?.name}"?`)) return;
+      await fetch(`/api/admin/products/${id}`, { method: 'DELETE', headers: { 'x-admin-token': token } });
+      await loadProducts();
+    }
+  </script>
+</body>
+</html>

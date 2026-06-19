@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vitrina — Ropa de armario</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="announcement">✦ Todos los artículos son únicos · Envío a coordinar ✦</div>
+
+  <header class="header">
+    <div class="logo">VITRINA</div>
+    <p class="header-sub">Ropa de armario seleccionada · Precios reales</p>
+  </header>
+
+  <nav class="filters">
+    <div class="filters-inner">
+      <button class="filter-btn active" data-cat="all">Todo</button>
+      <button class="filter-btn" data-cat="Remeras">Remeras</button>
+      <button class="filter-btn" data-cat="Pantalones">Pantalones</button>
+      <button class="filter-btn" data-cat="Camperas">Camperas</button>
+      <button class="filter-btn" data-cat="Vestidos">Vestidos</button>
+      <button class="filter-btn" data-cat="Calzado">Calzado</button>
+      <button class="filter-btn" data-cat="Accesorios">Accesorios</button>
+      <button class="filter-btn" data-cat="Otro">Otro</button>
+    </div>
+  </nav>
+
+  <main class="grid-wrapper">
+    <div id="products-grid" class="products-grid"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <p>Nada por aquí todavía.</p>
+    </div>
+  </main>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close" aria-label="Cerrar">✕</button>
+
+      <div class="modal-images" id="modal-images"></div>
+
+      <div class="modal-info">
+        <span class="modal-category" id="modal-category"></span>
+        <h2 id="modal-name"></h2>
+        <p class="modal-price" id="modal-price"></p>
+        <p class="modal-size hidden" id="modal-size"></p>
+        <div class="modal-divider"></div>
+        <p class="modal-desc" id="modal-desc"></p>
+        <a class="whatsapp-btn" id="modal-wa" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" aria-hidden="true">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+            <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.852L0 24l6.336-1.501A11.946 11.946 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.819 9.819 0 01-5.002-1.366l-.359-.213-3.721.881.928-3.601-.234-.37A9.818 9.818 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
+          </svg>
+          Consultar por WhatsApp
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-logo">VITRINA</span>
+    <p>¿Te interesa algo? Escribime y lo coordinamos.</p>
+    <a class="wa-footer" href="https://wa.me/5492326434718" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.852L0 24l6.336-1.501A11.946 11.946 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.819 9.819 0 01-5.002-1.366l-.359-.213-3.721.881.928-3.601-.234-.37A9.818 9.818 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
+      </svg>
+      +54 9 2326 43-4718
+    </a>
+  </footer>
+
+  <script>
+    const WA = '5492326434718';
+    let products = [];
+    let currentCat = 'all';
+    let imgs = [];
+    let imgIdx = 0;
+
+    async function load() {
+      const r = await fetch('/api/products');
+      products = await r.json();
+      render();
+    }
+
+    function render() {
+      const grid = document.getElementById('products-grid');
+      const empty = document.getElementById('empty-state');
+      const list = currentCat === 'all' ? products : products.filter(p => p.category === currentCat);
+
+      if (!list.length) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      grid.innerHTML = list.map(p => `
+        <article class="product-card" onclick="open_modal('${p.id}')" tabindex="0"
+          onkeydown="if(event.key==='Enter') open_modal('${p.id}')">
+          <div class="card-img-wrap">
+            ${p.images[0]
+              ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />`
+              : `<div class="no-img">○</div>`}
+          </div>
+          <div class="card-body">
+            <p class="card-cat">${p.category}</p>
+            <h3 class="card-name">${p.name}</h3>
+            ${p.size ? `<p class="card-size">Talle ${p.size}</p>` : ''}
+            <p class="card-price">$${p.price.toLocaleString('es-AR')}</p>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function open_modal(id) {
+      const p = products.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('modal-category').textContent = p.category;
+      document.getElementById('modal-name').textContent = p.name;
+      document.getElementById('modal-price').textContent = '$' + p.price.toLocaleString('es-AR');
+      const sizeEl = document.getElementById('modal-size');
+      if (p.size) { sizeEl.textContent = 'Talle ' + p.size; sizeEl.classList.remove('hidden'); }
+      else sizeEl.classList.add('hidden');
+      document.getElementById('modal-desc').textContent = p.description || '';
+      document.getElementById('modal-wa').href =
+        `https://wa.me/${WA}?text=${encodeURIComponent(`Hola! Me interesa "${p.name}" que vi en Vitrina. ¿Está disponible?`)}`;
+      imgs = p.images; imgIdx = 0;
+      renderImgs();
+      document.getElementById('modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function renderImgs() {
+      const wrap = document.getElementById('modal-images');
+      if (!imgs.length) { wrap.innerHTML = '<div class="no-img large">○</div>'; return; }
+      wrap.innerHTML = `
+        <div class="modal-img-main">
+          <img src="${imgs[imgIdx]}" alt="foto" />
+          ${imgs.length > 1 ? `
+            <button class="img-nav left" onclick="nav(-1)" aria-label="Anterior">‹</button>
+            <button class="img-nav right" onclick="nav(1)" aria-label="Siguiente">›</button>
+            <span class="img-counter">${imgIdx + 1} / ${imgs.length}</span>
+          ` : ''}
+        </div>
+        ${imgs.length > 1 ? `
+          <div class="modal-thumbnails">
+            ${imgs.map((s, i) => `<img src="${s}" class="thumb ${i === imgIdx ? 'active' : ''}"
+              onclick="go(${i})" alt="foto ${i+1}" />`).join('')}
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function nav(d) { imgIdx = (imgIdx + d + imgs.length) % imgs.length; renderImgs(); }
+    function go(i) { imgIdx = i; renderImgs(); }
+
+    function close_modal() {
+      document.getElementById('modal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    document.getElementById('modal-close').onclick = close_modal;
+    document.getElementById('modal-overlay').onclick = close_modal;
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') close_modal();
+      if (!document.getElementById('modal').classList.contains('hidden')) {
+        if (e.key === 'ArrowLeft') nav(-1);
+        if (e.key === 'ArrowRight') nav(1);
+      }
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        currentCat = b.dataset.cat;
+        render();
+      });
+    });
+
+    load();
+  </script>
+</body>
+</html>
