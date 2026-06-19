@@ -12,10 +12,11 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+// Defensive init: if env vars are missing the function still starts
+// (login works, but DB calls will return a config error)
+const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+  : null;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ropita2024';
 
@@ -62,9 +63,14 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: 'No autorizado' });
 }
 
+function requireDB(req, res, next) {
+  if (!supabase) return res.status(503).json({ error: 'Base de datos no configurada. Verificá las variables de entorno SUPABASE_URL y SUPABASE_SERVICE_KEY en Vercel.' });
+  next();
+}
+
 // ---- Public API ----
 
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', requireDB, async (req, res) => {
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -81,7 +87,7 @@ app.post('/api/admin/login', (req, res) => {
   else res.status(401).json({ error: 'Contraseña incorrecta' });
 });
 
-app.get('/api/admin/products', requireAuth, async (req, res) => {
+app.get('/api/admin/products', requireAuth, requireDB, async (req, res) => {
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -90,7 +96,7 @@ app.get('/api/admin/products', requireAuth, async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/admin/products', requireAuth, upload.array('images', 5), async (req, res) => {
+app.post('/api/admin/products', requireAuth, requireDB, upload.array('images', 5), async (req, res) => {
   const { name, category, price, description, size } = req.body;
   if (!name || !category || !price)
     return res.status(400).json({ error: 'Nombre, categoría y precio son requeridos' });
@@ -115,7 +121,7 @@ app.post('/api/admin/products', requireAuth, upload.array('images', 5), async (r
   res.json(data);
 });
 
-app.put('/api/admin/products/:id', requireAuth, upload.array('newImages', 5), async (req, res) => {
+app.put('/api/admin/products/:id', requireAuth, requireDB, upload.array('newImages', 5), async (req, res) => {
   const { data: current, error: fetchErr } = await supabase
     .from('products').select('*').eq('id', req.params.id).single();
   if (fetchErr || !current) return res.status(404).json({ error: 'No encontrado' });
@@ -149,7 +155,7 @@ app.put('/api/admin/products/:id', requireAuth, upload.array('newImages', 5), as
   res.json(data);
 });
 
-app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
+app.delete('/api/admin/products/:id', requireAuth, requireDB, async (req, res) => {
   const { data: product } = await supabase
     .from('products').select('images').eq('id', req.params.id).single();
   if (product?.images) await Promise.all(product.images.map(deleteImage));
