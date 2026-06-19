@@ -1,175 +1,170 @@
 const express = require('express');
 const multer = require('multer');
+const { v2: cloudinary } = require('cloudinary');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-const PORT = 3000;
 
-// Ensure data and uploads directories exist
-const dataDir = path.join(__dirname, 'data');
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const DB_PATH = path.join(dataDir, 'products.json');
-const ADMIN_PASSWORD = 'ropita2024'; // Cambiar por tu contraseña
-
-// Initialize DB
-function getDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ products: [] }));
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-// Multer config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, uuidv4() + ext);
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ropita2024';
+
+// Memory storage: no disk writes (required for Vercel)
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Solo se permiten imágenes'));
-  }
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_, file, cb) =>
+    file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Solo imágenes')),
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
 
-// Auth middleware
+// Serve static files in local dev (Vercel serves public/ via CDN automatically)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
+
+// ---- Helpers ----
+
+function uploadBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream({ folder: 'vitrina', resource_type: 'image' }, (err, result) =>
+        err ? reject(err) : resolve(result.secure_url)
+      )
+      .end(buffer);
+  });
+}
+
+function cloudinaryPublicId(url) {
+  const m = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+  return m ? m[1] : null;
+}
+
+function deleteImage(url) {
+  const pid = cloudinaryPublicId(url);
+  return pid ? cloudinary.uploader.destroy(pid) : Promise.resolve();
+}
+
 function requireAuth(req, res, next) {
-  const token = req.headers['x-admin-token'];
-  if (token === ADMIN_PASSWORD) return next();
+  if (req.headers['x-admin-token'] === ADMIN_PASSWORD) return next();
   res.status(401).json({ error: 'No autorizado' });
 }
 
-// --- PUBLIC API ---
+// ---- Public API ----
 
-// Get all available products
-app.get('/api/products', (req, res) => {
-  const db = getDB();
-  const products = db.products.filter(p => !p.sold);
-  res.json(products);
+app.get('/api/products', async (req, res) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('sold', false)
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-// --- ADMIN API ---
+// ---- Admin API ----
 
-// Login
 app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    res.json({ token: ADMIN_PASSWORD });
-  } else {
-    res.status(401).json({ error: 'Contraseña incorrecta' });
-  }
+  if (req.body.password === ADMIN_PASSWORD) res.json({ token: ADMIN_PASSWORD });
+  else res.status(401).json({ error: 'Contraseña incorrecta' });
 });
 
-// Get all products (including sold)
-app.get('/api/admin/products', requireAuth, (req, res) => {
-  const db = getDB();
-  res.json(db.products);
+app.get('/api/admin/products', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-// Add product
-app.post('/api/admin/products', requireAuth, upload.array('images', 5), (req, res) => {
+app.post('/api/admin/products', requireAuth, upload.array('images', 5), async (req, res) => {
   const { name, category, price, description, size } = req.body;
-  if (!name || !category || !price) {
+  if (!name || !category || !price)
     return res.status(400).json({ error: 'Nombre, categoría y precio son requeridos' });
-  }
 
-  const images = req.files ? req.files.map(f => '/uploads/' + f.filename) : [];
+  const images = await Promise.all((req.files || []).map(f => uploadBuffer(f.buffer)));
 
-  const product = {
-    id: uuidv4(),
-    name,
-    category,
-    price: parseFloat(price),
-    description: description || '',
-    size: size || '',
-    images,
-    sold: false,
-    createdAt: new Date().toISOString()
-  };
+  const { data, error } = await supabase
+    .from('products')
+    .insert([{
+      name,
+      category,
+      price: parseFloat(price),
+      description: description || '',
+      size: size || '',
+      images,
+      sold: false,
+    }])
+    .select()
+    .single();
 
-  const db = getDB();
-  db.products.unshift(product);
-  saveDB(db);
-
-  res.json(product);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-// Update product
-app.put('/api/admin/products/:id', requireAuth, upload.array('newImages', 5), (req, res) => {
-  const db = getDB();
-  const idx = db.products.findIndex(p => p.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Producto no encontrado' });
+app.put('/api/admin/products/:id', requireAuth, upload.array('newImages', 5), async (req, res) => {
+  const { data: current, error: fetchErr } = await supabase
+    .from('products').select('*').eq('id', req.params.id).single();
+  if (fetchErr || !current) return res.status(404).json({ error: 'No encontrado' });
 
-  const { name, category, price, description, size, sold, keepImages } = req.body;
-  const product = db.products[idx];
-
-  if (name) product.name = name;
-  if (category) product.category = category;
-  if (price) product.price = parseFloat(price);
-  if (description !== undefined) product.description = description;
-  if (size !== undefined) product.size = size;
-  if (sold !== undefined) product.sold = sold === 'true';
-
-  // Add new images
-  if (req.files && req.files.length > 0) {
-    const newImages = req.files.map(f => '/uploads/' + f.filename);
-    product.images = [...product.images, ...newImages];
+  // Handle image deletions
+  let images = current.images;
+  if (req.body.keepImages !== undefined) {
+    const keep = JSON.parse(req.body.keepImages);
+    await Promise.all(current.images.filter(img => !keep.includes(img)).map(deleteImage));
+    images = keep;
   }
 
-  // Remove images if requested
-  if (keepImages) {
-    const keep = JSON.parse(keepImages);
-    // Delete files that are removed
-    product.images.forEach(img => {
-      if (!keep.includes(img)) {
-        const filePath = path.join(__dirname, 'public', img);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
-    });
-    product.images = keep;
+  // Upload new images
+  if (req.files?.length) {
+    const newUrls = await Promise.all(req.files.map(f => uploadBuffer(f.buffer)));
+    images = [...images, ...newUrls];
   }
 
-  db.products[idx] = product;
-  saveDB(db);
-  res.json(product);
+  const update = { images };
+  const { name, category, price, description, size, sold } = req.body;
+  if (name)        update.name        = name;
+  if (category)    update.category    = category;
+  if (price)       update.price       = parseFloat(price);
+  if (description !== undefined) update.description = description;
+  if (size        !== undefined) update.size        = size;
+  if (sold        !== undefined) update.sold        = sold === 'true';
+
+  const { data, error } = await supabase
+    .from('products').update(update).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-// Delete product
-app.delete('/api/admin/products/:id', requireAuth, (req, res) => {
-  const db = getDB();
-  const product = db.products.find(p => p.id === req.params.id);
-  if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
+app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
+  const { data: product } = await supabase
+    .from('products').select('images').eq('id', req.params.id).single();
+  if (product?.images) await Promise.all(product.images.map(deleteImage));
 
-  // Delete image files
-  product.images.forEach(img => {
-    const filePath = path.join(__dirname, 'public', img);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  });
-
-  db.products = db.products.filter(p => p.id !== req.params.id);
-  saveDB(db);
+  const { error } = await supabase.from('products').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`Panel de admin: http://localhost:${PORT}/admin.html`);
-  console.log(`Contraseña admin: ${ADMIN_PASSWORD}`);
-});
+// Local dev server
+if (require.main === module) {
+  app.listen(3000, () => {
+    console.log('Servidor: http://localhost:3000');
+    console.log('Admin:    http://localhost:3000/admin.html');
+  });
+}
+
+module.exports = app;
