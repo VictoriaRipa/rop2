@@ -82,6 +82,18 @@ app.get('/api/products', requireDB, async (req, res) => {
 
 // ---- Admin API ----
 
+// Temporary diagnostic — remove after debugging
+app.get('/api/debug-auth', (req, res) => {
+  const raw = process.env.ADMIN_PASSWORD;
+  res.json({
+    env_var_exists: raw !== undefined,
+    env_var_length: raw !== undefined ? raw.length : null,
+    effective_length: ADMIN_PASSWORD.length,
+    first_char: ADMIN_PASSWORD[0],
+    last_char: ADMIN_PASSWORD[ADMIN_PASSWORD.length - 1],
+  });
+});
+
 app.post('/api/admin/login', (req, res) => {
   if (req.body.password === ADMIN_PASSWORD) res.json({ token: ADMIN_PASSWORD });
   else res.status(401).json({ error: 'Contraseña incorrecta' });
